@@ -1,0 +1,21 @@
+# Local tooling and generated output
+.gradle/
+.kotlin/
+.idea/
+**/build/
+local.properties
+*.iml
+
+# No APKs, signing material, secrets or personal documents
+*.apk
+*.aab
+*.jks
+*.keystore
+*.p12
+*.pem
+.env
+.env.*
+*secret*
+*credential*
+*resume*
+*.pdf
