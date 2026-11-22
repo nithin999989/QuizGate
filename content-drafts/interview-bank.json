@@ -1,0 +1,570 @@
+{
+  "status": "content draft, not wired into an installable release",
+  "assumptions": "Spring questions assume default proxy-based imperative transactions and no custom/global rollback override unless stated. Redis questions use standard documented behavior, not a promise about every managed product.",
+  "sources": {
+    "spring-tx": "https://docs.spring.io/spring-framework/reference/data-access/transaction/declarative/annotations.html",
+    "spring-rollback": "https://docs.spring.io/spring-framework/reference/data-access/transaction/declarative/rolling-back.html",
+    "spring-propagation": "https://docs.spring.io/spring-framework/reference/data-access/transaction/declarative/tx-propagation.html",
+    "spring-annotation": "https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/transaction/annotation/Transactional.html",
+    "boot-condition": "https://docs.spring.io/spring-boot/api/java/org/springframework/boot/autoconfigure/condition/ConditionalOnMissingBean.html",
+    "boot-health": "https://docs.spring.io/spring-boot/reference/actuator/endpoints.html",
+    "outbox": "https://docs.aws.amazon.com/prescriptive-guidance/latest/cloud-design-patterns/transactional-outbox.html",
+    "saga": "https://docs.aws.amazon.com/prescriptive-guidance/latest/cloud-design-patterns/saga-orchestration.html",
+    "retry": "https://docs.aws.amazon.com/prescriptive-guidance/latest/cloud-design-patterns/retry-backoff.html",
+    "circuit": "https://resilience4j.readme.io/docs/circuitbreaker",
+    "rate": "https://resilience4j.readme.io/docs/ratelimiter",
+    "bulkhead": "https://resilience4j.readme.io/docs/bulkhead",
+    "redis-set": "https://redis.io/docs/latest/commands/set/",
+    "redis-evict": "https://redis.io/docs/latest/develop/reference/eviction/",
+    "redis-cluster": "https://redis.io/docs/latest/operate/oss_and_stack/management/scaling/",
+    "redis-pubsub": "https://redis.io/docs/latest/develop/pubsub/",
+    "redis-lua": "https://redis.io/docs/latest/develop/programmability/eval-intro/",
+    "redis-wait": "https://redis.io/docs/latest/commands/WAIT/"
+  },
+  "questions": [
+    {
+      "id": "SB01",
+      "topic": "Spring Boot",
+      "level": "Intermediate",
+      "q": "Default proxy mode: non-transactional outer() calls this.inner(), which has @Transactional. No transaction already exists. What happens?",
+      "options": [
+        "A new transaction always starts",
+        "The annotation on inner() is not applied to this self-call",
+        "Spring refuses to start the application",
+        "The call becomes asynchronous"
+      ],
+      "answer": 1,
+      "why": "Self-invocation does not pass through the Spring proxy. The inner annotation is therefore not intercepted for this call.",
+      "followUp": "Show an integration test, then move the transaction boundary to an external call through a managed bean.",
+      "sources": [
+        "spring-tx"
+      ]
+    },
+    {
+      "id": "SB02",
+      "topic": "Spring Boot",
+      "level": "Intermediate",
+      "q": "A proxied transactional method throws a checked business exception. With the standard defaults and no rollback overrides, what is true?",
+      "options": [
+        "Only the exception message decides",
+        "The checked exception alone does not request rollback",
+        "Checked exceptions can never trigger rollback",
+        "Every checked exception forces rollback"
+      ],
+      "answer": 1,
+      "why": "The standard defaults roll back on RuntimeException and Error, not checked exceptions. Explicit rollback rules or a global configuration can change that.",
+      "followUp": "When would rollbackFor be appropriate? How would you test the committed database state?",
+      "sources": [
+        "spring-rollback",
+        "spring-tx"
+      ]
+    },
+    {
+      "id": "SB03",
+      "topic": "Spring Boot",
+      "level": "Intermediate",
+      "q": "An external call enters an inner method using REQUIRES_NEW while an outer transaction is active. What is the key property?",
+      "options": [
+        "Both scopes must share one physical transaction",
+        "The inner scope gets an independent physical transaction",
+        "The outer transaction is committed immediately",
+        "The inner method can never roll back"
+      ],
+      "answer": 1,
+      "why": "REQUIRES_NEW uses an independent physical transaction. Its commit or rollback is separate from the suspended outer transaction.",
+      "followUp": "What happens if the inner audit write commits but the outer business operation later fails?",
+      "sources": [
+        "spring-propagation"
+      ]
+    },
+    {
+      "id": "SB04",
+      "topic": "Spring Boot",
+      "level": "Advanced",
+      "q": "Many threads hold outer database transactions and call REQUIRES_NEW work. Why can the connection pool become exhausted?",
+      "options": [
+        "The inner work may need another connection while the outer one stays bound",
+        "One connection can serve unlimited simultaneous transactions",
+        "The database drops all outer connections",
+        "REQUIRES_NEW disables every timeout"
+      ],
+      "answer": 0,
+      "why": "Outer resources remain bound while the inner scope acquires its own resources. Pool sizing and concurrency limits must account for that extra demand.",
+      "followUp": "How would you detect pool waits and redesign a non-critical audit path without hiding failures?",
+      "sources": [
+        "spring-propagation"
+      ]
+    },
+    {
+      "id": "SB05",
+      "topic": "Spring Boot",
+      "level": "Advanced",
+      "q": "An inner REQUIRED scope marks a shared transaction rollback-only. The outer caller catches the exception and attempts commit. What should it expect?",
+      "options": [
+        "Only the inner rows are undone automatically",
+        "The commit attempt can produce UnexpectedRollbackException",
+        "The rollback-only flag expires after the catch block",
+        "Catching the exception guarantees commit"
+      ],
+      "answer": 1,
+      "why": "REQUIRED scopes normally share a physical transaction. An inner rollback-only marker can prevent the outer commit even when the outer code catches the original exception.",
+      "followUp": "Which transaction boundaries would make the desired business outcome explicit?",
+      "sources": [
+        "spring-propagation"
+      ]
+    },
+    {
+      "id": "SB06",
+      "topic": "Spring Boot",
+      "level": "Intermediate",
+      "q": "An imperative transaction managed by PlatformTransactionManager starts a new thread. Does that thread automatically inherit the original transaction?",
+      "options": [
+        "No, the thread-bound transaction is not automatically propagated",
+        "Yes, whenever the method is public",
+        "Only if the class name ends in Service",
+        "Yes, if both threads share an executor"
+      ],
+      "answer": 0,
+      "why": "Imperative Spring transactions are commonly thread-bound. Newly started threads do not automatically participate. Reactive transactions instead depend on their Reactor context.",
+      "followUp": "Where would you put a transaction boundary around asynchronous work?",
+      "sources": [
+        "spring-annotation"
+      ]
+    },
+    {
+      "id": "SB07",
+      "topic": "Spring Boot",
+      "level": "Intermediate",
+      "q": "Why would an auto-configuration @Bean method use @ConditionalOnMissingBean(MyService.class)?",
+      "options": [
+        "To expose it as an HTTP endpoint",
+        "To make the bean thread-safe",
+        "To supply a default only when a matching bean is missing",
+        "To replace every user bean unconditionally"
+      ],
+      "answer": 2,
+      "why": "The condition checks processed bean definitions for a match. Auto-configuration ordering matters when other configurations can create the same kind of bean.",
+      "followUp": "How would an application-provided bean make the default back off, and how would you test that?",
+      "sources": [
+        "boot-condition"
+      ]
+    },
+    {
+      "id": "SB08",
+      "topic": "Spring Boot",
+      "level": "Advanced",
+      "q": "A shared database outage should not trigger restarts of every healthy application instance. Which probe design avoids that specific failure mode?",
+      "options": [
+        "Put the shared database check in liveness",
+        "Make every probe always return success",
+        "Disable all timeouts",
+        "Keep liveness about the application's own viability; assess dependency checks separately for readiness"
+      ],
+      "answer": 3,
+      "why": "Spring Boot warns that external dependencies in liveness can cause cascading restarts. Readiness dependency checks are a separate, careful design decision, not an automatic rule.",
+      "followUp": "If all replicas share that database, what are the tradeoffs of taking all of them out of readiness?",
+      "sources": [
+        "boot-health"
+      ]
+    },
+    {
+      "id": "SB09",
+      "topic": "Spring Boot",
+      "level": "Advanced",
+      "q": "Actuator runs on a separate management port. Its probe succeeds while the main HTTP server cannot accept connections. What is the blind spot?",
+      "options": [
+        "Only the DNS name matters",
+        "The probe may not exercise the main server's infrastructure",
+        "The connection pool cannot affect HTTP availability",
+        "A successful management probe proves all business requests succeed"
+      ],
+      "answer": 1,
+      "why": "A separate management context can remain healthy while the main port or its resources fail. Consider exposing the probe groups on the main server port as documented.",
+      "followUp": "How would you test main-port exhaustion without turning every slow request into a restart?",
+      "sources": [
+        "boot-health"
+      ]
+    },
+    {
+      "id": "SB10",
+      "topic": "Spring Boot",
+      "level": "Intermediate",
+      "q": "Does @Transactional(readOnly=true) universally guarantee that a write will fail?",
+      "options": [
+        "No, it is a hint whose enforcement depends on the underlying subsystem",
+        "It disables the transaction entirely",
+        "Yes, because Java makes the object immutable",
+        "Yes, for every transaction manager"
+      ],
+      "answer": 0,
+      "why": "The read-only flag is a hint to the actual transaction subsystem. It is not a universal write-prevention or authorization boundary.",
+      "followUp": "Where should write authorization and database constraints be enforced instead?",
+      "sources": [
+        "spring-annotation"
+      ]
+    },
+    {
+      "id": "MS01",
+      "topic": "Microservices",
+      "level": "Intermediate",
+      "q": "A service must commit an order and reliably publish its event. What is the transactional outbox's central move?",
+      "options": [
+        "Write the order and outbox record in one local database transaction, then relay the event",
+        "Assume HTTP and SQL commit atomically",
+        "Publish first and ignore the database result",
+        "Replace the database with a log statement"
+      ],
+      "answer": 0,
+      "why": "The outbox records the state change and event together in the local transaction, avoiding the simple database-write/message-send dual-write gap. A relay still has its own delivery concerns.",
+      "followUp": "What happens when the relay crashes after publication but before marking the outbox record sent?",
+      "sources": [
+        "outbox"
+      ]
+    },
+    {
+      "id": "MS02",
+      "topic": "Microservices",
+      "level": "Advanced",
+      "q": "An outbox relay publishes an event twice after a crash. Which consumer property is still needed?",
+      "options": [
+        "A promise that retries never happen",
+        "A longer JSON field name",
+        "Idempotent processing keyed by a stable event identity",
+        "A new database for every delivery"
+      ],
+      "answer": 2,
+      "why": "Outbox publication can duplicate events. Consumers need deduplication/idempotent effects; the outbox alone is not end-to-end exactly-once processing.",
+      "followUp": "Where must the deduplication record and business effect be committed together, and what changes for an external email provider?",
+      "sources": [
+        "outbox"
+      ]
+    },
+    {
+      "id": "MS03",
+      "topic": "Microservices",
+      "level": "Intermediate",
+      "q": "A downstream API allows only a configured number of requests per time period. Which Resilience4j mechanism directly models that budget?",
+      "options": [
+        "A circuit breaker that always stays closed",
+        "A hash tag",
+        "A transaction annotation",
+        "RateLimiter"
+      ],
+      "answer": 3,
+      "why": "RateLimiter grants a configured number of permissions per refresh period. Concurrency limits and failure-based circuit breaking solve different problems.",
+      "followUp": "How would you handle a provider's 429 response without amplifying traffic with retries?",
+      "sources": [
+        "rate",
+        "retry"
+      ]
+    },
+    {
+      "id": "MS04",
+      "topic": "Microservices",
+      "level": "Intermediate",
+      "q": "A saga has completed local steps before a later service fails. What is the usual recovery model?",
+      "options": [
+        "Deleting every service's database",
+        "Ignoring the failed step",
+        "A guaranteed global database rollback across every service",
+        "Business-specific compensating actions for completed steps"
+      ],
+      "answer": 3,
+      "why": "A saga coordinates local transactions and compensations. Compensation is a business action, not a universal rewind of all external effects.",
+      "followUp": "What is the compensation for a shipped item or an email that has already been sent?",
+      "sources": [
+        "saga"
+      ]
+    },
+    {
+      "id": "MS05",
+      "topic": "Microservices",
+      "level": "Intermediate",
+      "q": "What distinguishes saga orchestration from a purely event-choreographed flow?",
+      "options": [
+        "An orchestrator coordinates the participants and sequence",
+        "Orchestration eliminates all failures",
+        "No state is ever recorded",
+        "Every service shares one JDBC connection"
+      ],
+      "answer": 0,
+      "why": "Orchestration introduces a coordinator that directs participant transactions. Its persistence, recovery and idempotency remain design concerns.",
+      "followUp": "How does the coordinator recover after it crashes between two steps?",
+      "sources": [
+        "saga"
+      ]
+    },
+    {
+      "id": "MS06",
+      "topic": "Microservices",
+      "level": "Advanced",
+      "q": "Which consistency statement fits a typical saga of local transactions?",
+      "options": [
+        "Compensation removes the need for idempotency",
+        "Every read is globally linearizable by default",
+        "It is automatically one globally isolated ACID transaction",
+        "Intermediate states and eventual consistency must be part of the design"
+      ],
+      "answer": 3,
+      "why": "Local commits can be visible before the full business workflow completes. Saga design must account for intermediate states, retries and compensations.",
+      "followUp": "Which user-visible states would you expose while a payment or reservation is pending?",
+      "sources": [
+        "saga"
+      ]
+    },
+    {
+      "id": "MS07",
+      "topic": "Microservices",
+      "level": "Intermediate",
+      "q": "A payment request times out after the server may already have charged the customer. What makes retrying safer?",
+      "options": [
+        "Assuming timeout means no side effect happened",
+        "Retrying forever at zero delay",
+        "Changing the key on every retry",
+        "A stable idempotency key with server-side handling of repeated requests"
+      ],
+      "answer": 3,
+      "why": "A timeout does not establish that no effect occurred. Repeated requests need an idempotency design at the system that performs the effect; retries alone cannot provide it.",
+      "followUp": "How are an in-progress request and a completed result represented for the same key?",
+      "sources": [
+        "retry",
+        "outbox"
+      ]
+    },
+    {
+      "id": "MS08",
+      "topic": "Microservices",
+      "level": "Intermediate",
+      "q": "What is a sensible retry policy for transient downstream failures?",
+      "options": [
+        "Use bounded attempts and increasing backoff within an overall timeout budget",
+        "Remove timeouts so requests never fail",
+        "Retry every exception forever",
+        "Retry validation failures faster than network errors"
+      ],
+      "answer": 0,
+      "why": "Backoff reduces repeated pressure, but retries consume time and capacity. Use them for suitable transient failures, with idempotency and a bounded budget.",
+      "followUp": "How can retries at several service layers multiply load during an outage?",
+      "sources": [
+        "retry"
+      ]
+    },
+    {
+      "id": "MS09",
+      "topic": "Microservices",
+      "level": "Advanced",
+      "q": "A closed circuit breaker has a sliding window of 15 calls. Does that limit the system to 15 concurrent calls?",
+      "options": [
+        "Yes, but only for HTTP",
+        "No; use a bulkhead to bound concurrency",
+        "Yes, the window is a semaphore",
+        "It limits the database table to 15 rows"
+      ],
+      "answer": 1,
+      "why": "The circuit-breaker window measures outcomes; it is not a concurrency cap. Resilience4j documents bulkheads for limiting concurrent execution.",
+      "followUp": "How would you size the bulkhead and connection pool together?",
+      "sources": [
+        "circuit",
+        "bulkhead"
+      ]
+    },
+    {
+      "id": "MS10",
+      "topic": "Microservices",
+      "level": "Intermediate",
+      "q": "After an open circuit's wait period, what is the purpose of HALF_OPEN?",
+      "options": [
+        "Release unlimited traffic without measurement",
+        "Permanently disable the service",
+        "Allow a configured number of trial calls to assess recovery",
+        "Retry every previous failed request at once"
+      ],
+      "answer": 2,
+      "why": "HALF_OPEN allows a bounded trial set and evaluates the configured outcome thresholds before reopening or closing the circuit.",
+      "followUp": "Which metrics distinguish a genuinely recovered dependency from one surviving only a small probe load?",
+      "sources": [
+        "circuit"
+      ]
+    },
+    {
+      "id": "RD01",
+      "topic": "Redis",
+      "level": "Intermediate",
+      "q": "Which single command sets a value only if the key is absent and gives it a 30-second expiry?",
+      "options": [
+        "SET job token; EXPIRE job 30 as two separate commands",
+        "SET job token XX",
+        "SET job token NX EX 30",
+        "GET job NX 30"
+      ],
+      "answer": 2,
+      "why": "SET combines the absent-key condition and expiry in one operation. Two separate commands can leave a key without expiry if the client fails between them. This alone is not a complete distributed-lock safety proof.",
+      "followUp": "For a lease, why must release check the ownership token, and what happens if work exceeds the TTL?",
+      "sources": [
+        "redis-set"
+      ]
+    },
+    {
+      "id": "RD02",
+      "topic": "Redis",
+      "level": "Intermediate",
+      "q": "A key has a TTL. What does a successful ordinary SET key value do to that TTL when no expiry option or KEEPTTL is supplied?",
+      "options": [
+        "Converts it to a hash tag",
+        "Doubles it",
+        "Always preserves it",
+        "Discards the previous TTL"
+      ],
+      "answer": 3,
+      "why": "A normal successful SET replaces the value and discards the prior time to live. Preserve or supply expiry explicitly when that is the intended contract.",
+      "followUp": "How would you test that a cache-update path cannot accidentally create permanent entries?",
+      "sources": [
+        "redis-set"
+      ]
+    },
+    {
+      "id": "RD03",
+      "topic": "Redis",
+      "level": "Intermediate",
+      "q": "Redis exceeds maxmemory under noeviction. Which behavior is expected for commands that need more memory?",
+      "options": [
+        "All reads are permanently blocked",
+        "Redis silently creates infinite memory",
+        "Those writes can return an error; existing values can still be read",
+        "Oldest keys are always deleted"
+      ],
+      "answer": 2,
+      "why": "noeviction does not automatically evict keys to satisfy memory-adding writes. The application must handle resulting errors instead of treating the cache as infallible.",
+      "followUp": "Which metrics and fallbacks would keep a cache outage from flooding the database?",
+      "sources": [
+        "redis-evict"
+      ]
+    },
+    {
+      "id": "RD04",
+      "topic": "Redis",
+      "level": "Intermediate",
+      "q": "How does volatile-lru differ from allkeys-lru?",
+      "options": [
+        "They are identical in every dataset",
+        "volatile-lru considers only keys without expiry",
+        "allkeys-lru ignores memory limits",
+        "volatile-lru selects only keys with expiry set"
+      ],
+      "answer": 3,
+      "why": "Volatile policies consider keys with an expiration. If no keys qualify, volatile policies can behave like noeviction rather than freeing arbitrary keys.",
+      "followUp": "Why can a mixture of permanent and expiring keys create a surprising eviction failure?",
+      "sources": [
+        "redis-evict"
+      ]
+    },
+    {
+      "id": "RD05",
+      "topic": "Redis",
+      "level": "Intermediate",
+      "q": "Is Redis's LRU eviction implementation an exact global ordering of every key by last access?",
+      "options": [
+        "No, it uses an approximation based on sampled candidates",
+        "Yes, with no approximation",
+        "It evicts only alphabetically",
+        "It never considers access patterns"
+      ],
+      "answer": 0,
+      "why": "Redis uses an approximation of LRU. Sampling/configuration trades work and memory against approximation quality; do not describe it as a perfect global LRU list.",
+      "followUp": "What workload would make LFU or a different policy worth testing?",
+      "sources": [
+        "redis-evict"
+      ]
+    },
+    {
+      "id": "RD06",
+      "topic": "Redis",
+      "level": "Advanced",
+      "q": "For a multi-key operation in Redis Cluster, what placement condition is required?",
+      "options": [
+        "The keys must merely have the same TTL",
+        "All involved keys must belong to the same hash slot",
+        "The values must be equal",
+        "Any keys on any nodes can be combined atomically"
+      ],
+      "answer": 1,
+      "why": "Cluster multi-key operations require a common hash slot. Matching non-empty hash tags can deliberately colocate related keys; being on the same current node is not the full rule.",
+      "followUp": "How could a tenant-wide hash tag concentrate traffic into a hot slot?",
+      "sources": [
+        "redis-cluster"
+      ]
+    },
+    {
+      "id": "RD07",
+      "topic": "Redis",
+      "level": "Advanced",
+      "q": "A Redis Cluster primary acknowledges a write, then fails before asynchronous replication completes. What risk remains?",
+      "options": [
+        "An acknowledged write can be lost in some failover conditions",
+        "The entire cluster is automatically strongly consistent",
+        "The client is guaranteed the old primary will return",
+        "Acknowledged writes can never be lost"
+      ],
+      "answer": 0,
+      "why": "Redis Cluster documents that asynchronous replication can allow acknowledged writes to be lost. Design the durability contract rather than assuming an acknowledgement is a consensus commit.",
+      "followUp": "Which data belongs in the durable system of record rather than only in this cache?",
+      "sources": [
+        "redis-cluster"
+      ]
+    },
+    {
+      "id": "RD08",
+      "topic": "Redis",
+      "level": "Intermediate",
+      "q": "A Redis Pub/Sub subscriber disconnects while messages are published. What happens to those missed messages?",
+      "options": [
+        "Pub/Sub automatically replays them on reconnect",
+        "Every message moves into a permanent consumer group",
+        "They are not replayed by Pub/Sub; its delivery is at-most-once",
+        "Publishing becomes a database transaction"
+      ],
+      "answer": 2,
+      "why": "Redis Pub/Sub has at-most-once delivery and no replay for missed messages. A persistent stream/queue is a different design choice when replay or acknowledgements are required.",
+      "followUp": "Which delivery and retention requirements would make a stream or Kafka a better fit?",
+      "sources": [
+        "redis-pubsub"
+      ]
+    },
+    {
+      "id": "RD09",
+      "topic": "Redis",
+      "level": "Advanced",
+      "q": "Why should a Lua script running on Redis remain short and bounded?",
+      "options": [
+        "Atomicity guarantees zero latency",
+        "Its atomic execution blocks other server activity during its runtime",
+        "It cannot access Redis data",
+        "It executes entirely in the caller's JVM"
+      ],
+      "answer": 1,
+      "why": "Redis guarantees atomic script execution by blocking other server activity while the script runs. Long or unbounded work can harm all clients of that server.",
+      "followUp": "Which checks belong in the script, and which processing should happen outside Redis?",
+      "sources": [
+        "redis-lua"
+      ]
+    },
+    {
+      "id": "RD10",
+      "topic": "Redis",
+      "level": "Advanced",
+      "q": "Does a successful WAIT for replica acknowledgements make Redis a strongly consistent store?",
+      "options": [
+        "WAIT disables replication",
+        "Yes, if the key has a TTL",
+        "No; it improves data safety but is not a complete strong-consistency guarantee",
+        "Yes, under every failover"
+      ],
+      "answer": 2,
+      "why": "WAIT reports replica acknowledgements for preceding writes on the connection. Redis explicitly states that it does not by itself make the store strongly consistent. Check the returned replica count, including on timeout.",
+      "followUp": "How would your application respond when fewer replicas acknowledge than requested?",
+      "sources": [
+        "redis-wait"
+      ]
+    }
+  ]
+}
