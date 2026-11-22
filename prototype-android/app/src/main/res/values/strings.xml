@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">QuizGate</string>
+    <string name="service_description">Watches which app is in front only during a study session you started, so QuizGate can show a quiz over it. It reads app names only, never screen content. You can turn this off anytime in Settings.</string>
+</resources>
