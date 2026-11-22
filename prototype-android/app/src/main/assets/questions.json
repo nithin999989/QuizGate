@@ -1,0 +1,171 @@
+{
+  "Java": [
+    {
+      "q": "Which keyword makes a field belong to the class instead of each object?",
+      "options": [
+        "final",
+        "static",
+        "public",
+        "new"
+      ],
+      "answer": 1,
+      "why": "static members are shared by the whole class. Every object sees the same one."
+    },
+    {
+      "q": "Which collection keeps insertion order and gives index access?",
+      "options": [
+        "HashMap",
+        "HashSet",
+        "ArrayList",
+        "TreeSet"
+      ],
+      "answer": 2,
+      "why": "ArrayList is backed by an array, so order is kept and get(i) is fast."
+    },
+    {
+      "q": "In Java, a String is...",
+      "options": [
+        "mutable",
+        "immutable",
+        "a primitive",
+        "an array of char you can edit"
+      ],
+      "answer": 1,
+      "why": "Once a String is created it cannot change. Methods like concat() return a new String."
+    },
+    {
+      "q": "Which access modifier gives a member the most restricted access?",
+      "options": [
+        "public",
+        "protected",
+        "default",
+        "private"
+      ],
+      "answer": 3,
+      "why": "private restricts access to the declaring class and its nested or enclosing classes. It is more restrictive than public, protected or package access."
+    },
+    {
+      "q": "What runs Java bytecode?",
+      "options": [
+        "JDK",
+        "JRE",
+        "JVM",
+        "JIT source compiler"
+      ],
+      "answer": 2,
+      "why": "The JVM (Java Virtual Machine) executes bytecode. JDK builds, JRE carries the JVM."
+    }
+  ],
+  "Python": [
+    {
+      "q": "Which keyword defines a function?",
+      "options": [
+        "func",
+        "def",
+        "lambda only",
+        "function"
+      ],
+      "answer": 1,
+      "why": "def name(args): starts a function. lambda makes small anonymous ones."
+    },
+    {
+      "q": "In Python 3, what type is 3 / 2?",
+      "options": [
+        "int",
+        "float",
+        "double",
+        "decimal"
+      ],
+      "answer": 1,
+      "why": "/ always returns a float (1.5). Use // for floor division."
+    },
+    {
+      "q": "Which structure stores key-value pairs?",
+      "options": [
+        "list",
+        "tuple",
+        "set",
+        "dict"
+      ],
+      "answer": 3,
+      "why": "dict maps keys to values: {\"name\": \"Nithin\"}. Lists and tuples hold positions."
+    },
+    {
+      "q": "Are Python lists mutable?",
+      "options": [
+        "Yes",
+        "No"
+      ],
+      "answer": 0,
+      "why": "Lists can change in place: append, remove, sort. Tuples cannot."
+    },
+    {
+      "q": "What does len('hello') return?",
+      "options": [
+        "4",
+        "5",
+        "6",
+        "Error"
+      ],
+      "answer": 1,
+      "why": "len counts items. \"hello\" has 5 characters."
+    }
+  ],
+  "Data science": [
+    {
+      "q": "In pandas, a table of rows and columns is a...",
+      "options": [
+        "Series",
+        "DataFrame",
+        "ndarray",
+        "Panel"
+      ],
+      "answer": 1,
+      "why": "A DataFrame is the 2D table. A Series is one column."
+    },
+    {
+      "q": "Overfitting means the model does well on...",
+      "options": [
+        "new data only",
+        "training data but poorly on new data",
+        "both equally",
+        "neither"
+      ],
+      "answer": 1,
+      "why": "The model memorized the training set instead of learning the pattern."
+    },
+    {
+      "q": "Which library is built around fast numerical arrays?",
+      "options": [
+        "requests",
+        "NumPy",
+        "flask",
+        "pytest"
+      ],
+      "answer": 1,
+      "why": "NumPy gives the ndarray, the base under pandas and most ML tools."
+    },
+    {
+      "q": "In SQL, SELECT does what?",
+      "options": [
+        "deletes rows",
+        "retrieves rows",
+        "creates a table",
+        "renames a column"
+      ],
+      "answer": 1,
+      "why": "SELECT reads data. CREATE makes tables, DELETE removes rows."
+    },
+    {
+      "q": "Which is more robust to outliers, mean or median?",
+      "options": [
+        "Mean",
+        "Median",
+        "Both equally",
+        "Neither"
+      ],
+      "answer": 1,
+      "why": "One huge value drags the mean but barely moves the median."
+    }
+  ]
+}
