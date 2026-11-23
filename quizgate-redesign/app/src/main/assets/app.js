@@ -16,6 +16,9 @@ const skillChip=(skill,selected)=>`<button class="chip ${selected?'selected':''}
 function home(s){
  const topics=[['Spring Boot','Transactions and production failures','SB'],['Microservices','Delivery, retries and resilience','MS'],['Redis','Caching and consistency','RD']];
  return header('QuizGate','Practice what you build.')+
+ `<section class="section">${label('PHONE-WIDE QUIZ SESSION')}`+
+ (s.phoneWide?action('End phone-wide session','endSession',true)+detail(`Session is ON. A question appears over your other apps every ${s.interval} minutes until you end it.`)+(s.overlay?soft(`The first question arrived ${s.interval} minutes after you started. It opens on top of whatever app you are using; answer it and it dismisses itself.`):soft(`Overlay permission is off, so questions cannot appear yet. Allow "Display over other apps" for QuizGate in Android Settings.`)):action('Start phone-wide session','startSession',true)+detail('Off. Nothing runs and nothing pops up until you start it here.')+(s.overlay?soft(`Tap Start, then use your phone normally. The first question appears ${s.interval} minutes later over whatever app is open. End the session here any time.`):soft(`How it starts: tap Start; Android opens "Display over other apps" once - allow it for QuizGate, come back, tap Start again. The first question then appears ${s.interval} minutes later over your other apps.`)))+
+ (s.note?`<div class="status" role="status">${esc(s.note)}</div>`:'')+`</section>`+
  `<section class="section">${label('INTERVIEW PRACTICE')}<h2 class="group-heading">Your stack. Harder questions.</h2><div class="topics">`+
  topics.map(([name,sub,icon])=>`<button class="topic" data-action="topic" data-value="${name}" aria-pressed="${name===s.selectedTopic}"><span class="icon">${icon}</span><span class="topic-main"><span class="topic-title">${name}</span><span class="detail">${sub}</span></span><span class="count">10</span></button>`).join('')+
  `</div>${soft('30 sourced draft MCQs. Explanations plus interview follow-ups.')}</section>`+
@@ -23,8 +26,7 @@ function home(s){
  `<section class="section">${label('MAKE IT YOURS')}<div class="panel"><h2 class="panel-title">From your resume</h2>${detail('Use real skills and projects to shape your practice set.')}${action(s.hasProfile?'Choose another resume':'Choose resume','pick')}${soft('Read locally. You review the extracted details.')}${s.hasProfile?action('Review skills and projects','review'):''}</div></section>`+
  action('Preview an interview question','preview',true)+footer()+
  soft(s.phoneWide?`Preview topic: ${s.selectedTopic}. Phone-wide timer is active.`:`Preview topic: ${s.selectedTopic}. The ${s.interval}-minute choice is saved; no background timer is active.`)+
- (s.note?`<div class="status" role="status">${esc(s.note)}</div>`:'')+
- (s.phoneWide?action('End phone-wide session','endSession')+soft('Phone-wide session is on. A question appears over other apps every '+s.interval+' minutes until you end it.'):action('Start phone-wide session','startSession')+soft('Only runs after you start it. Android asks for "Display over other apps" once; no accessibility or usage access.'))+soft(`Practice score: ${s.right} correct, ${s.wrong} incorrect.`)+
+ soft('No accessibility or usage access, ever. The popup runs only in sessions you start.')+soft(`Practice score: ${s.right} correct, ${s.wrong} incorrect.`)+
  (s.hasProfile?action('Clear resume details','clear'):'')+`<button class="link" data-action="licenses">Font licences</button>`;
 }
 function question(s){
