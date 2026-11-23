@@ -99,15 +99,14 @@ fi
 adb shell am start -n com.quizgate.app/.MainActivity
 sleep 5
 dump ui-10-home.xml
-T=$(python3 ci/find_tap.py shots/ui-10-home.xml "resume" || true)
-if [ -n "$T" ]; then
-  adb shell input tap $T; sleep 8; shot 10-picker; dump ui-10-picker.xml
-  P=$(python3 ci/find_tap.py shots/ui-10-picker.xml "test-resume" || true)
-  if [ -z "$P" ]; then adb shell input swipe 400 900 400 300 300; sleep 3; shot 10-picker-scrolled; dump ui-10-picker.xml; P=$(python3 ci/find_tap.py shots/ui-10-picker.xml "test-resume" || true); fi
-  if [ -n "$P" ]; then
-    adb shell input tap $P; sleep 10; shot 11-review; dump ui-11-review.xml
-    grep -io "spring boot\|detected skills\|kafka\|docker" shots/ui-11-review.xml | sort -u > shots/ocr-evidence.txt
+if tap_text "Choose resume"; then
+  sleep 8; shot 10-picker; dump ui-10-picker.xml
+  if tap_text "test-resume"; then
+    sleep 10; shot 13-review; dump ui-13-review.xml
+    grep -io "spring boot\|detected skills\|kafka\|docker" shots/ui-13-review.xml | sort -u > shots/ocr-evidence.txt
+    [ -s shots/ocr-evidence.txt ] || echo "WARN: review screen showed no recognised resume skills"
   else
+    shot 10-picker-scrolled
     echo "WARN: test-resume.pdf not found in picker"
   fi
 else
