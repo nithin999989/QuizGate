@@ -112,6 +112,7 @@ class MainActivity : Activity() {
             .put("projects",JSONArray(projects)).put("sourceName",sourceName)
             .put("matchedTopics",JSONArray(topics.toList())).put("matchedCount",all.count{it.topic in topics})
             .put("answered",answered).put("remaining",remaining).put("phoneWide",QuizSessionService.running)
+            .put("overlay",android.provider.Settings.canDrawOverlays(this))
         current?.let{q->state.put("question",JSONObject().put("id",q.id).put("topic",q.topic).put("level",q.level)
             .put("q",q.question).put("options",JSONArray(q.options)).put("followUp",q.followUp).put("sources",JSONArray(q.sources))
             .put("explanation",if(answered)q.explanation else "").put("correctAnswer",if(answered)q.options[q.answer] else ""))}
