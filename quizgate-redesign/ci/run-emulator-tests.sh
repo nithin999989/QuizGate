@@ -9,10 +9,10 @@ dump(){ adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; adb pull /sdc
 # tap_text NEEDLE: scrolls the app WebView until a node containing NEEDLE is at least
 # 24px tall on screen (fully visible), then taps its centre. Returns 1 if never found.
 tap_text(){
-  local needle="$1" minh="${2:-24}" x i
+  local needle="$1" minh="${2:-24}" reqc="${3:-}" x i
   for i in 1 2 3 4 5 6; do
     dump ui-scan.xml
-    x=$(python3 ci/find_tap.py shots/ui-scan.xml "$needle" "$minh" || true)
+    x=$(python3 ci/find_tap.py shots/ui-scan.xml "$needle" "$minh" "$reqc" || true)
     if [ -n "$x" ]; then adb shell input tap $x; return 0; fi
     adb shell input swipe 160 480 160 220 300; sleep 1
   done
@@ -52,7 +52,9 @@ if tap_text "Start phone-wide"; then
     grant=0
     for depth in 1 2 3; do
       if tap_text "Allow display over other apps" 12 || tap_text "Permit drawing over other apps" 12; then grant=1; break; fi
-      tap_text "Display over other apps" 24 || tap_text "QuizGate development" 24 || break
+      # clickable-rows-only: App Info has a "Display over other apps" row, the app list has a
+      # "QuizGate development" row; non-clickable toolbar titles carry the same texts.
+      tap_text "Display over other apps" 24 1 || tap_text "QuizGate development" 24 1 || break
       sleep 2
     done
     [ "$grant" = 1 ] || { echo "FAIL: overlay Settings toggle not found (all known paths)"; FAIL=1; }
