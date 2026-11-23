@@ -30,6 +30,7 @@ jobs:
       - name: Restore binary assets
         run: bash quizgate-redesign/ci/restore-binaries.sh
       - name: Build app
+        working-directory: quizgate-redesign
         run: |
           echo "sdk.dir=$ANDROID_HOME" > local.properties
           chmod +x gradlew
@@ -46,4 +47,4 @@ jobs:
         if: always()
         with:
           name: native-test-evidence
-          path: shots/
+          path: quizgate-redesign/shots/
