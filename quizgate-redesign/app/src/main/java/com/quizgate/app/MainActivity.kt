@@ -193,10 +193,31 @@ class MainActivity : Activity() {
             requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS),41)
             render();return
         }
-        QuizSessionService.start(this,selectedTopic,interval)
-        lastNote="Phone-wide session on. A question appears every $interval minutes until you end it."
+        try{
+            QuizSessionService.start(this,selectedTopic,interval)
+        }catch(e:Exception){
+            lastNote="Could not start the session ("+e.javaClass.simpleName+"). Nothing is running."
+            render();return
+        }
+        lastNote="Phone-wide session starting. A question appears every $interval minutes until you end it."
         render()
+        watchServiceState(true)
     }
-    private fun stopPhoneWideSession(){QuizSessionService.stop(this);lastNote="Phone-wide session ended.";render()}
+
+    // Re-render only when the service's real running flag reaches the wanted state (bounded: ~6s),
+    // so the home never claims ON/OFF before the service actually is, however slow the device.
+    private var stateWatch:Runnable?=null
+    private fun watchServiceState(want:Boolean){
+        stateWatch?.let{web.removeCallbacks(it)}
+        var tries=0
+        val r=object:Runnable{override fun run(){
+            if(isDestroyed)return
+            if(QuizSessionService.running==want){render();return}
+            if(++tries<=24)web.postDelayed(this,250) else render()
+        }}
+        stateWatch=r
+        web.postDelayed(r,250)
+    }
+    private fun stopPhoneWideSession(){QuizSessionService.stop(this);lastNote="Phone-wide session ending.";render();watchServiceState(false)}
     override fun onDestroy(){loaded=false;countdown?.cancel();readGeneration++;readJob?.cancel(true);worker.shutdownNow();web.removeJavascriptInterface("LocalApp");web.destroy();super.onDestroy()}
 }
