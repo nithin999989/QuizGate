@@ -27,7 +27,8 @@ sleep 8
 adb root && adb wait-for-device
 
 adb install -r app/build/outputs/apk/debug/app-debug.apk || FAIL=1
-adb shell appops set com.quizgate.app SYSTEM_ALERT_WINDOW allow
+# NOTE: no appops/pm pregrants - the first-install permission UX below drives the real
+# Settings overlay grant (and the Android 13+ notification prompt) through the UI.
 adb push ci/test-resume.pdf /sdcard/Download/test-resume.pdf
 adb shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file:///sdcard/Download/test-resume.pdf
 sleep 3
@@ -36,6 +37,41 @@ adb shell settings put global window_animation_scale 0; adb shell settings put g
 # 1: app home
 adb shell am start -n com.quizgate.app/.MainActivity
 sleep 6; shot 01-app-home; dump ui-01.xml
+
+# 1b: first-install permission UX. Overlay is NOT pre-granted: tapping Start must route to the
+# app's "Display over other apps" Settings screen; grant via the UI toggle, return, start again.
+# On Android 13+ the POST_NOTIFICATIONS runtime dialog follows. This is the unproven-by-pregrant flow.
+if tap_text "Start phone-wide"; then
+  sleep 3; shot ux-01-overlay-settings; dump ui-ux-01-settings.xml
+  if ! grep -qi "display over other apps\|drawing over other apps" shots/ui-ux-01-settings.xml; then
+    echo "FAIL: Start on fresh install did not route to the overlay Settings screen"; FAIL=1
+  else
+    tap_text "Allow display over other apps" || tap_text "Permit drawing over other apps" || tap_text "display over other apps" || { echo "FAIL: overlay Settings toggle not found"; FAIL=1; }
+    sleep 1
+    adb shell input keyevent 4
+    sleep 2
+    if tap_text "Start phone-wide"; then
+      sleep 2
+      SDKV=$(adb shell getprop ro.build.version.sdk | tr -d '\r')
+      if [ "${SDKV:-0}" -ge 33 ]; then tap_text "Allow" || echo "WARN: notification permission dialog not handled"; sleep 2; fi
+      sleep 3; shot ux-02-session-started; dump ui-ux-02-started.xml
+      adb shell dumpsys activity services com.quizgate.app > shots/service-dump-ux-start.txt 2>&1
+      grep -q QuizSessionService shots/service-dump-ux-start.txt || { echo "FAIL: session not running after first-install permission UX"; FAIL=1; }
+      grep -qi "End phone-wide" shots/ui-ux-02-started.xml || echo "WARN: home did not switch to End state after UX start"
+      if tap_text "End phone-wide"; then
+        sleep 3; shot ux-03-session-ended; dump ui-ux-03-ended.xml
+        adb shell dumpsys activity services com.quizgate.app > shots/service-dump-ux-end.txt 2>&1
+        grep -q QuizSessionService shots/service-dump-ux-end.txt && { echo "FAIL: UI End did not stop the session after the UX flow"; FAIL=1; }
+      else
+        echo "FAIL: End phone-wide button not found after UX start"; FAIL=1
+      fi
+    else
+      echo "FAIL: Start phone-wide not found after returning from overlay Settings"; FAIL=1
+    fi
+  fi
+else
+  echo "FAIL: Start phone-wide button not found on home (first-install UX)"; FAIL=1
+fi
 
 # 2: start session (20s debug interval), leave to launcher, wait for popup
 adb shell "am startservice -n com.quizgate.app/.QuizSessionService -e topic 'Spring Boot' --ei intervalMin 5 --ei debugSeconds 20"
