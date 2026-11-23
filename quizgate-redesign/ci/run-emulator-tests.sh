@@ -6,6 +6,18 @@ FAIL=0
 mkdir -p shots
 shot(){ adb exec-out screencap -p > "shots/$1.png" 2>/dev/null; }
 dump(){ adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; adb pull /sdcard/ui.xml "shots/$1" >/dev/null 2>&1; }
+# tap_text NEEDLE: scrolls the app WebView until a node containing NEEDLE is at least
+# 24px tall on screen (fully visible), then taps its centre. Returns 1 if never found.
+tap_text(){
+  local needle="$1" x i
+  for i in 1 2 3 4 5 6; do
+    dump ui-scan.xml
+    x=$(python3 ci/find_tap.py shots/ui-scan.xml "$needle" 24 || true)
+    if [ -n "$x" ]; then adb shell input tap $x; return 0; fi
+    adb shell input swipe 160 480 160 220 300; sleep 1
+  done
+  return 1
+}
 
 adb wait-for-device
 while [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" != "1" ]; do sleep 2; done
@@ -66,16 +78,12 @@ if grep -qi quizgate shots/ui-09.xml 2>/dev/null; then echo "FAIL: popup appeare
 adb shell am start -n com.quizgate.app/.MainActivity
 sleep 5
 dump ui-11-home.xml
-S=$(python3 ci/find_tap.py shots/ui-11-home.xml "Start phone-wide" || true)
-if [ -n "$S" ]; then
-  adb shell input tap $S
+if tap_text "Start phone-wide"; then
   sleep 3; shot 11-ui-session-started; dump ui-11-started.xml
   adb shell dumpsys activity services com.quizgate.app > shots/service-dump-ui-start.txt 2>&1
   grep -q QuizSessionService shots/service-dump-ui-start.txt || { echo "FAIL: UI Start button did not start QuizSessionService"; FAIL=1; }
   grep -qi "End phone-wide" shots/ui-11-started.xml || echo "WARN: home did not switch to End state after UI start"
-  E=$(python3 ci/find_tap.py shots/ui-11-started.xml "End phone-wide" || true)
-  if [ -n "$E" ]; then
-    adb shell input tap $E
+  if tap_text "End phone-wide"; then
     sleep 3; shot 12-ui-session-ended; dump ui-12-ended.xml
     adb shell dumpsys activity services com.quizgate.app > shots/service-dump-ui-end.txt 2>&1
     grep -q QuizSessionService shots/service-dump-ui-end.txt && { echo "FAIL: UI End button did not stop QuizSessionService"; FAIL=1; }
