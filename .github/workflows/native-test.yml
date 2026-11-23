@@ -42,6 +42,12 @@ jobs:
           arch: x86_64
           emulator-options: -no-snapshot-save -no-window -no-audio -gpu swiftshader_indirect
           script: bash quizgate-redesign/ci/run-emulator-tests.sh
+      - name: Emit evidence to log
+        if: always()
+        working-directory: quizgate-redesign
+        run: |
+          for f in shots/*.txt shots/*.xml; do [ -f "$f" ] || continue; echo "===== EVIDENCE-FILE: $f ====="; cat "$f"; done
+          for f in shots/*.png; do [ -f "$f" ] || continue; echo "===== EVIDENCE-PNG-B64: $f ====="; base64 -w0 "$f"; echo; done
       - uses: actions/upload-artifact@v4
         if: always()
         with:
