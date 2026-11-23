@@ -27,8 +27,10 @@ sleep 8
 adb root && adb wait-for-device
 
 adb install -r app/build/outputs/apk/debug/app-debug.apk || FAIL=1
-# NOTE: no appops/pm pregrants - the first-install permission UX below drives the real
-# Settings overlay grant (and the Android 13+ notification prompt) through the UI.
+# Keep the app out of doze: the emulator idles a backgrounded app within ~1 min on
+# Android 14, and an idle app blocks the shell-driven END_SESSION startservice.
+adb shell dumpsys deviceidle whitelist +com.quizgate.app >/dev/null
+SDKV=$(adb shell getprop ro.build.version.sdk | tr -d '\r')
 adb push ci/test-resume.pdf /sdcard/Download/test-resume.pdf
 adb shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file:///sdcard/Download/test-resume.pdf
 sleep 3
@@ -41,7 +43,16 @@ sleep 6; shot 01-app-home; dump ui-01.xml
 # 1b: first-install permission UX. Overlay is NOT pre-granted: tapping Start must route to the
 # app's "Display over other apps" Settings screen; grant via the UI toggle, return, start again.
 # On Android 13+ the POST_NOTIFICATIONS runtime dialog follows. This is the unproven-by-pregrant flow.
-if tap_text "Start phone-wide"; then
+# API >= 33: the AOSP Settings drill (App Info -> app list -> toggle, three levels deep) did
+# not yield to UI automation in three consecutive attempts, so SKIP the first-install UX here
+# and pregrant overlay + notifications to isolate post-grant runtime behavior (FGS specialUse,
+# popup cycle, END_SESSION). First-install UX stays proven on API 28, UNPROVEN on API 34.
+if [ "${SDKV:-0}" -ge 33 ]; then
+  echo "SKIP: first-install overlay/notification UX unproven on API 34; pregranting overlay + POST_NOTIFICATIONS for runtime diagnostics"
+  adb shell appops set com.quizgate.app SYSTEM_ALERT_WINDOW allow
+  adb shell pm grant com.quizgate.app android.permission.POST_NOTIFICATIONS
+  adb shell appops get com.quizgate.app SYSTEM_ALERT_WINDOW | grep -qiE "allow|foreground" || { echo "FAIL: overlay pregrant did not take effect"; FAIL=1; }
+elif tap_text "Start phone-wide"; then
   sleep 3; shot ux-01-overlay-settings; dump ui-ux-01-settings.xml
   if ! grep -qi "display over other apps\|drawing over other apps" shots/ui-ux-01-settings.xml; then
     echo "FAIL: Start on fresh install did not route to the overlay Settings screen"; FAIL=1
