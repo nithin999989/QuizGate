@@ -42,7 +42,7 @@ jobs:
           target: default
           arch: x86_64
           emulator-options: -no-snapshot-save -no-window -no-audio -gpu swiftshader_indirect
-          script: bash ci/run-emulator-tests.sh
+          script: bash quizgate-redesign/ci/run-emulator-tests.sh
       - uses: actions/upload-artifact@v4
         if: always()
         with:
