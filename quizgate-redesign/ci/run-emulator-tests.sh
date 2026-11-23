@@ -9,10 +9,10 @@ dump(){ adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; adb pull /sdc
 # tap_text NEEDLE: scrolls the app WebView until a node containing NEEDLE is at least
 # 24px tall on screen (fully visible), then taps its centre. Returns 1 if never found.
 tap_text(){
-  local needle="$1" x i
+  local needle="$1" minh="${2:-24}" x i
   for i in 1 2 3 4 5 6; do
     dump ui-scan.xml
-    x=$(python3 ci/find_tap.py shots/ui-scan.xml "$needle" 24 || true)
+    x=$(python3 ci/find_tap.py shots/ui-scan.xml "$needle" "$minh" || true)
     if [ -n "$x" ]; then adb shell input tap $x; return 0; fi
     adb shell input swipe 160 480 160 220 300; sleep 1
   done
@@ -137,7 +137,7 @@ sleep 5
 dump ui-10-home.xml
 if tap_text "Choose resume"; then
   sleep 8; shot 10-picker; dump ui-10-picker.xml
-  if tap_text "test-resume"; then
+  if tap_text "test-resume" 12; then
     sleep 10; shot 13-review; dump ui-13-review.xml
     grep -io "spring boot\|detected skills\|kafka\|docker" shots/ui-13-review.xml | sort -u > shots/ocr-evidence.txt
     [ -s shots/ocr-evidence.txt ] || echo "WARN: review screen showed no recognised resume skills"
