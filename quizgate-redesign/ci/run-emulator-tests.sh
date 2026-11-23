@@ -62,7 +62,32 @@ sleep 3; shot 08-after-end
 sleep 22; shot 09-no-popup-after-end; dump ui-09.xml
 if grep -qi quizgate shots/ui-09.xml 2>/dev/null; then echo "FAIL: popup appeared after END_SESSION"; FAIL=1; fi
 
-# 9: resume picker -> OCR -> review (best effort)
+# 9: unprivileged UI start/stop path (the normal user flow: home button -> service on, end button -> service off)
+adb shell am start -n com.quizgate.app/.MainActivity
+sleep 5
+dump ui-11-home.xml
+S=$(python3 ci/find_tap.py shots/ui-11-home.xml "Start phone-wide" || true)
+if [ -n "$S" ]; then
+  adb shell input tap $S
+  sleep 3; shot 11-ui-session-started; dump ui-11-started.xml
+  adb shell dumpsys activity services com.quizgate.app > shots/service-dump-ui-start.txt 2>&1
+  grep -q QuizSessionService shots/service-dump-ui-start.txt || { echo "FAIL: UI Start button did not start QuizSessionService"; FAIL=1; }
+  grep -qi "End phone-wide" shots/ui-11-started.xml || echo "WARN: home did not switch to End state after UI start"
+  E=$(python3 ci/find_tap.py shots/ui-11-started.xml "End phone-wide" || true)
+  if [ -n "$E" ]; then
+    adb shell input tap $E
+    sleep 3; shot 12-ui-session-ended; dump ui-12-ended.xml
+    adb shell dumpsys activity services com.quizgate.app > shots/service-dump-ui-end.txt 2>&1
+    grep -q QuizSessionService shots/service-dump-ui-end.txt && { echo "FAIL: UI End button did not stop QuizSessionService"; FAIL=1; }
+    grep -qi "Start phone-wide" shots/ui-12-ended.xml || echo "WARN: home did not switch back to Start state after UI end"
+  else
+    echo "FAIL: End phone-wide button not found after UI start"; FAIL=1
+  fi
+else
+  echo "FAIL: Start phone-wide button not found on home"; FAIL=1
+fi
+
+# 10: resume picker -> OCR -> review (best effort)
 adb shell am start -n com.quizgate.app/.MainActivity
 sleep 5
 dump ui-10-home.xml
