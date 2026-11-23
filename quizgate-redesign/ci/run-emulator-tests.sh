@@ -10,11 +10,15 @@ dump(){ adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; adb pull /sdc
 adb wait-for-device
 while [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" != "1" ]; do sleep 2; done
 sleep 8
+# AOSP (target=default) images are userdebug: adbd can run as root, which is required
+# to start the app's non-exported QuizSessionService from the shell.
+adb root && adb wait-for-device
 
 adb install -r app/build/outputs/apk/debug/app-debug.apk || FAIL=1
 adb shell appops set com.quizgate.app SYSTEM_ALERT_WINDOW allow
 adb push ci/test-resume.pdf /sdcard/Download/test-resume.pdf
 adb shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file:///sdcard/Download/test-resume.pdf
+sleep 3
 adb shell settings put global window_animation_scale 0; adb shell settings put global transition_animation_scale 0
 
 # 1: app home
@@ -22,7 +26,9 @@ adb shell am start -n com.quizgate.app/.MainActivity
 sleep 6; shot 01-app-home; dump ui-01.xml
 
 # 2: start session (20s debug interval), leave to launcher, wait for popup
-adb shell am startservice -n com.quizgate.app/.QuizSessionService -e topic "Spring Boot" --ei intervalMin 5 --ei debugSeconds 20
+adb shell "am startservice -n com.quizgate.app/.QuizSessionService -e topic 'Spring Boot' --ei intervalMin 5 --ei debugSeconds 20"
+sleep 2
+adb shell dumpsys activity services com.quizgate.app > shots/service-dump-start.txt 2>&1
 sleep 2
 adb shell input keyevent 3
 sleep 26
@@ -49,7 +55,9 @@ sleep 5; shot 07-incoming-call-with-popup; dump ui-07-call.xml
 adb emu gsm cancel 5550001111
 sleep 2
 # 8: end session, verify no further popups
-adb shell am startservice -n com.quizgate.app/.QuizSessionService -a com.quizgate.app.END_SESSION
+adb shell "am startservice -n com.quizgate.app/.QuizSessionService -a com.quizgate.app.END_SESSION"
+sleep 2
+adb shell dumpsys activity services com.quizgate.app > shots/service-dump-end.txt 2>&1
 sleep 3; shot 08-after-end
 sleep 22; shot 09-no-popup-after-end; dump ui-09.xml
 if grep -qi quizgate shots/ui-09.xml 2>/dev/null; then echo "FAIL: popup appeared after END_SESSION"; FAIL=1; fi
@@ -60,8 +68,9 @@ sleep 5
 dump ui-10-home.xml
 T=$(python3 ci/find_tap.py shots/ui-10-home.xml "resume" || true)
 if [ -n "$T" ]; then
-  adb shell input tap $T; sleep 4; shot 10-picker; dump ui-10-picker.xml
+  adb shell input tap $T; sleep 8; shot 10-picker; dump ui-10-picker.xml
   P=$(python3 ci/find_tap.py shots/ui-10-picker.xml "test-resume" || true)
+  if [ -z "$P" ]; then adb shell input swipe 400 900 400 300 300; sleep 3; shot 10-picker-scrolled; dump ui-10-picker.xml; P=$(python3 ci/find_tap.py shots/ui-10-picker.xml "test-resume" || true); fi
   if [ -n "$P" ]; then
     adb shell input tap $P; sleep 10; shot 11-review; dump ui-11-review.xml
     grep -io "spring boot\|detected skills\|kafka\|docker" shots/ui-11-review.xml | sort -u > shots/ocr-evidence.txt
