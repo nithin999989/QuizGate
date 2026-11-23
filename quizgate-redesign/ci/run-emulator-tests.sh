@@ -46,22 +46,23 @@ if tap_text "Start phone-wide"; then
   if ! grep -qi "display over other apps\|drawing over other apps" shots/ui-ux-01-settings.xml; then
     echo "FAIL: Start on fresh install did not route to the overlay Settings screen"; FAIL=1
   else
-    # API 28 AOSP lands on the dedicated toggle screen; API 34 AOSP lands on App Info, where a
-    # "Display over other apps" row opens the toggle sub-screen. Handle both.
-    if ! { tap_text "Allow display over other apps" 12 || tap_text "Permit drawing over other apps" 12; }; then
-      if tap_text "Display over other apps" 24; then
-        sleep 2
-        tap_text "Allow display over other apps" 12 || tap_text "Permit drawing over other apps" 12 || { echo "FAIL: overlay toggle not found on Settings sub-screen"; FAIL=1; }
-      else
-        echo "FAIL: overlay Settings toggle not found"; FAIL=1
-      fi
-    fi
+    # Settings depth varies by API/ROM: API 28 AOSP lands on the toggle screen directly; API 34
+    # AOSP lands on App Info -> "Display over other apps" row -> app list -> app row -> toggle.
+    # Drill down until the toggle label exists, then tap it.
+    grant=0
+    for depth in 1 2 3; do
+      if tap_text "Allow display over other apps" 12 || tap_text "Permit drawing over other apps" 12; then grant=1; break; fi
+      tap_text "Display over other apps" 24 || tap_text "QuizGate development" 24 || break
+      sleep 2
+    done
+    [ "$grant" = 1 ] || { echo "FAIL: overlay Settings toggle not found (all known paths)"; FAIL=1; }
     sleep 1; shot ux-01b-after-toggle
     adb shell appops get com.quizgate.app SYSTEM_ALERT_WINDOW | grep -qiE "allow|foreground" || { echo "FAIL: overlay appop not granted after UI toggle"; FAIL=1; }
-    adb shell input keyevent 4
-    sleep 2
-    # BACK lands on App Info first when the flow went through it; BACK again to reach the app.
-    dump ui-back.xml; grep -q "com.quizgate" shots/ui-back.xml || { adb shell input keyevent 4; sleep 2; }
+    # BACK out of however many Settings screens stacked above the app.
+    for b in 1 2 3; do
+      adb shell input keyevent 4; sleep 2
+      dump ui-back.xml; grep -q "com.quizgate" shots/ui-back.xml && break
+    done
     if tap_text "Start phone-wide"; then
       sleep 2
       SDKV=$(adb shell getprop ro.build.version.sdk | tr -d '\r')
