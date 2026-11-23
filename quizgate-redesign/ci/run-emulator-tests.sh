@@ -46,10 +46,22 @@ if tap_text "Start phone-wide"; then
   if ! grep -qi "display over other apps\|drawing over other apps" shots/ui-ux-01-settings.xml; then
     echo "FAIL: Start on fresh install did not route to the overlay Settings screen"; FAIL=1
   else
-    tap_text "Allow display over other apps" || tap_text "Permit drawing over other apps" || tap_text "display over other apps" || { echo "FAIL: overlay Settings toggle not found"; FAIL=1; }
-    sleep 1
+    # API 28 AOSP lands on the dedicated toggle screen; API 34 AOSP lands on App Info, where a
+    # "Display over other apps" row opens the toggle sub-screen. Handle both.
+    if ! { tap_text "Allow display over other apps" 12 || tap_text "Permit drawing over other apps" 12; }; then
+      if tap_text "Display over other apps" 24; then
+        sleep 2
+        tap_text "Allow display over other apps" 12 || tap_text "Permit drawing over other apps" 12 || { echo "FAIL: overlay toggle not found on Settings sub-screen"; FAIL=1; }
+      else
+        echo "FAIL: overlay Settings toggle not found"; FAIL=1
+      fi
+    fi
+    sleep 1; shot ux-01b-after-toggle
+    adb shell appops get com.quizgate.app SYSTEM_ALERT_WINDOW | grep -qiE "allow|foreground" || { echo "FAIL: overlay appop not granted after UI toggle"; FAIL=1; }
     adb shell input keyevent 4
     sleep 2
+    # BACK lands on App Info first when the flow went through it; BACK again to reach the app.
+    dump ui-back.xml; grep -q "com.quizgate" shots/ui-back.xml || { adb shell input keyevent 4; sleep 2; }
     if tap_text "Start phone-wide"; then
       sleep 2
       SDKV=$(adb shell getprop ro.build.version.sdk | tr -d '\r')
@@ -111,7 +123,8 @@ sleep 22; shot 09-no-popup-after-end; dump ui-09.xml
 if grep -qi quizgate shots/ui-09.xml 2>/dev/null; then echo "FAIL: popup appeared after END_SESSION"; FAIL=1; fi
 
 # 9: unprivileged UI start/stop path (the normal user flow: home button -> service on, end button -> service off)
-adb shell am start -n com.quizgate.app/.MainActivity
+# --activity-clear-top: Settings screens opened from the app stack into its task; pop them so home is visible.
+adb shell am start --activity-clear-top -n com.quizgate.app/.MainActivity
 sleep 5
 dump ui-11-home.xml
 if tap_text "Start phone-wide"; then
@@ -132,7 +145,7 @@ else
 fi
 
 # 10: resume picker -> OCR -> review (best effort)
-adb shell am start -n com.quizgate.app/.MainActivity
+adb shell am start --activity-clear-top -n com.quizgate.app/.MainActivity
 sleep 5
 dump ui-10-home.xml
 if tap_text "Choose resume"; then
